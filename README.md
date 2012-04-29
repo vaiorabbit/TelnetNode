@@ -2,8 +2,8 @@
 
 A demonstration program showing how to transfer texts via socket API.
 
-													   Created: 2012-04-29 (Sun)
-												 Last Modified: 2012-04-29 (Sun)
+                                                       Created: 2012-04-29 (Sun)
+                                                 Last Modified: 2012-04-29 (Sun)
 
 ## Usage ##
 
