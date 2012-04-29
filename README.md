@@ -2,28 +2,28 @@
 
 A demonstration program showing how to transfer texts via socket API.
 
-                                                       Created: 2012-04-29 (Sun)
-                                                 Last Modified: 2012-04-29 (Sun)
+*   Created: 2012-04-29 (Sun)
+*   Last Modified: 2012-04-29 (Sun)
 
 ## Usage ##
 
-  <Terminal 1>                                <Terminal 2> 
-  $ make all
-  $ sudo ./server
-  Password:
-  Server started.                             $ sudo ./client
-  Server got message. : Hello, Mr.Server.     Client started.
-  Server got message. : Hello, Mr.Server.     ...
-  Server got message. : Hello, Mr.Server.
-  Server got message. : Hello, Mr.Server.
-  Server got message. : Hello, Mr.Server.
-  Server got message. : Hello, Mr.Server.
-  Server got message. : Hello, Mr.Server.
-  Server got message. : Hello, Mr.Server.
-  Server got message. : Hello, Mr.Server.
-  Server got message. : Hello, Mr.Server.
-  Server got message. : bye                   Client got message. : bye
-  Server terminated.                          Client terminated.
+    <Terminal 1>                                <Terminal 2> 
+    $ make all
+    $ sudo ./server
+    Password:
+    Server started.                             $ sudo ./client
+    Server got message. : Hello, Mr.Server.     Client started.
+    Server got message. : Hello, Mr.Server.     ...
+    Server got message. : Hello, Mr.Server.
+    Server got message. : Hello, Mr.Server.
+    Server got message. : Hello, Mr.Server.
+    Server got message. : Hello, Mr.Server.
+    Server got message. : Hello, Mr.Server.
+    Server got message. : Hello, Mr.Server.
+    Server got message. : Hello, Mr.Server.
+    Server got message. : Hello, Mr.Server.
+    Server got message. : bye                   Client got message. : bye
+    Server terminated.                          Client terminated.
 
 *   See TelnetNode class declaration for user API.
 *   Note: On UNIX platforms, the use of port 0~1023 needs superuser privilege.
