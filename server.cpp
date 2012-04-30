@@ -5,14 +5,14 @@ int main( int argc, char** argv )
     TelnetNode::Initialize();
 
     TelnetNode* pServer = TelnetNode::CreateServer();
-    puts("Server started.");
+    std::puts("Server started.");
 
     while ( pServer )
     {
         TNMessagePtr pMsg = pServer->PopReceivedText();
         if ( pMsg.get() != NULL )
         {
-            printf("Server got message. : %s", pMsg->Text.get());
+            std::printf("Server got message. : %s", pMsg->Text.get());
             if ( !std::strcmp(pMsg->Text.get(), "bye\n") )
             {
                 pServer->SendText( "bye\n", 0 );
@@ -22,7 +22,7 @@ int main( int argc, char** argv )
     }
 
     TelnetNode::ReleaseNode( pServer );
-    puts("Server terminated.");
+    std::puts("Server terminated.");
 
     TelnetNode::Finalize();
 

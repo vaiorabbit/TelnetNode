@@ -228,6 +228,9 @@ public:
 
     void Append( const char* pBuffer, unsigned int uBufferSize )
         {
+            if ( !pBuffer || uBufferSize == 0 )
+                return;
+
             // stock
             if ( m_Buffer.size() + uBufferSize >= m_Buffer.capacity() )
                 m_Buffer.resize( m_Buffer.capacity() + uBufferSize );
@@ -313,85 +316,29 @@ private:
 }; // End : TelnetNode
 
 
-// TelnetClient : Provides the client-specific implementation (Connect, etc.)
-class TelnetClient : public TelnetNode
+// TNConnection : a connection established to the endpoint
+class TNConnection
 {
 public:
-    TelnetClient()
+
+    TNConnection( TelnetNode* pNode, TNSocketHandle hSocket )
         : m_Thread()
-        , m_Socket(TNSocketHandle_Invalid)
         , m_SocketMutex()
+        , m_Socket(hSocket)
+        , m_pNode(pNode)
         {}
 
-    virtual ~TelnetClient()
-        {
-            Close();
-        }
+    ~TNConnection()
+        {}
 
-    virtual bool IsServer()
-        { return false; }
-
-    virtual bool SendText( const char* pText, unsigned int /*uClient*/ = 0 )
+    bool Send( const char* pText, std::size_t uLength )
         {
-            const unsigned int rawBufSize = 8192;
-            char rawBuffer[rawBufSize];
-            snprintf( rawBuffer, 8192, "%s", pText );
-            std::size_t length = std::strlen( rawBuffer );
+            m_SocketMutex.Lock();
             int flags = 0;
-            int bytes = send( m_Socket, rawBuffer, length, flags );
+            int bytes = send( m_Socket, pText, uLength, flags);
+            m_SocketMutex.Unlock();
 
             return bytes >= 0;
-        }
-
-    bool Connect( const char* address = "LOCALHOST", unsigned int port = 23 )
-        {
-            bool result = false;
-
-            Close();
-            m_Thread.Invalidate();
-
-            m_Socket = socket( AF_INET, SOCK_STREAM, IPPROTO_TCP );
-            if ( m_Socket != TNSocketHandle_Invalid )
-            {
-                sockaddr_in service = { 0 };
-
-                service.sin_family      = AF_INET;
-                service.sin_port        = htons( port );
-                service.sin_addr.s_addr = inet_addr( address );
-
-                if ( service.sin_addr.s_addr == INADDR_NONE )
-                {
-                    hostent* pHost = gethostbyname( address );
-                    std::memcpy( &service.sin_addr.s_addr, pHost->h_addr, pHost->h_length );
-                    service.sin_family = pHost->h_addrtype;
-                }
-
-                int connectResult = connect( m_Socket, (sockaddr*)&service, sizeof(service) );
-                if ( connectResult == 0 )
-                {
-                    m_Thread.Run( ReceiveThreadEntry, this );
-                }
-                else
-                {
-                    assert( !"TelnetClient::Connect : connect != 0" );
-                }
-
-                if ( !m_Thread.IsInvalid() )
-                {
-                    result = true;
-                }
-                else
-                {
-                    closesocket( m_Socket );
-                    m_Socket = TNSocketHandle_Invalid;
-                }
-            }
-            else
-            {
-                assert( !"TelnetClient::Connect : m_Socket == TNSocketHandle_Invalid" );
-            }
-
-            return result;
         }
 
     void Close()
@@ -408,11 +355,16 @@ public:
             }
         }
 
+    void Run()
+        {
+            m_Thread.Run( ReceiveThreadEntry, this );
+        }
+
 private:
 
     static TNThread::RetVal TNAPI ReceiveThreadEntry( void* arg )
         {
-            ((TelnetClient*)arg)->ReceiveThread();
+            ((TNConnection*)arg)->ReceiveThread();
             TNThread::Exit();
 
             return 0;
@@ -437,7 +389,11 @@ private:
                 int flags = 0;
                 int bytes = recv( clientSocket, rawBuffer, rawBufSize, flags );
 
-                if ( bytes <= 0 )
+                if ( bytes > 0 )
+                {
+                    receiveBuffer.Append( rawBuffer, bytes );
+                }
+                else
                 {
                     done = true;
                     m_SocketMutex.Lock();
@@ -446,14 +402,10 @@ private:
                     m_Socket = clientSocket;
                     m_SocketMutex.Unlock();
                 }
-                else
-                {
-                    receiveBuffer.Append( rawBuffer, bytes );
-                }
 
                 while ( !receiveBuffer.Empty() )
                 {
-                    PushReceivedText( receiveBuffer.GetText() );
+                    m_pNode->PushReceivedText( receiveBuffer.GetText() );
                 }
 
                 m_SocketMutex.Lock();
@@ -466,6 +418,101 @@ private:
     TNThread       m_Thread;
     TNSocketHandle m_Socket;
     TNMutex        m_SocketMutex;
+    TelnetNode*    m_pNode;
+};
+
+typedef std::tr1::shared_ptr<TNConnection> TNConnectionPtr;
+typedef std::map<unsigned int, TNConnectionPtr> TNConnectionMap;
+
+
+// TelnetClient : Provides the client-specific implementation (Connect, etc.)
+class TelnetClient : public TelnetNode
+{
+public:
+    TelnetClient()
+        : m_pServer()
+        {}
+
+    virtual ~TelnetClient()
+        {
+            Close();
+        }
+
+    virtual bool IsServer()
+        { return false; }
+
+    virtual bool SendText( const char* pText, unsigned int /*uClient*/ = 0 )
+        {
+            const unsigned int rawBufSize = 8192;
+            char rawBuffer[rawBufSize];
+            snprintf( rawBuffer, 8192, "%s", pText );
+            std::size_t length = std::strlen( rawBuffer );
+            bool result = m_pServer->Send( rawBuffer, length );
+
+            return result;
+        }
+
+    bool Connect( const char* address = "LOCALHOST", unsigned int port = 23 )
+        {
+            bool result = false;
+
+            Close();
+
+            TNSocketHandle serverSocket = socket( AF_INET, SOCK_STREAM, IPPROTO_TCP );
+            if ( serverSocket != TNSocketHandle_Invalid )
+            {
+                sockaddr_in service = { 0 };
+
+                service.sin_family      = AF_INET;
+                service.sin_port        = htons( port );
+                service.sin_addr.s_addr = inet_addr( address );
+
+                if ( service.sin_addr.s_addr == INADDR_NONE )
+                {
+                    hostent* pHost = gethostbyname( address );
+                    std::memcpy( &service.sin_addr.s_addr, pHost->h_addr, pHost->h_length );
+                    service.sin_family = pHost->h_addrtype;
+                }
+
+                int connectResult = connect( serverSocket, (sockaddr*)&service, sizeof(service) );
+                if ( connectResult == 0 )
+                {
+                    TNConnectionPtr pConnection( new TNConnection(this, serverSocket) );
+                    pConnection->Run();
+                    m_pServer = pConnection;
+
+                    result = true;
+                }
+                else
+                {
+                    assert( !"TelnetClient::Connect : connect != 0" );
+                }
+
+                if ( result == false )
+                {
+                    closesocket( serverSocket );
+                }
+            }
+            else
+            {
+                assert( !"TelnetClient::Connect : serverSocket == TNSocketHandle_Invalid" );
+            }
+
+            return result;
+        }
+
+    void Close()
+        {
+            if ( m_pServer.get() != NULL )
+            {
+                m_pServer->Close();
+                puts("close done");
+            }
+        }
+
+private:
+
+    TNConnectionPtr m_pServer;
 }; // End : TelnetClient
 
 
@@ -499,9 +546,9 @@ public:
             bool result = true;
             if ( uClient == 0 )
             {
-                for ( ConnectionMap::iterator it = m_Clients.begin(); it != m_Clients.end(); ++it )
+                for ( TNConnectionMap::iterator it = m_Clients.begin(); it != m_Clients.end(); ++it )
                 {
-                    ConnectionPtr pClient = (*it).second;
+                    TNConnectionPtr pClient = (*it).second;
                     bool done = pClient->Send( rawBuffer, length );
                     if ( !done )
                         result = false;
@@ -509,10 +556,10 @@ public:
             }
             else
             {
-                ConnectionMap::iterator it = m_Clients.find( uClient );
+                TNConnectionMap::iterator it = m_Clients.find( uClient );
                 if ( it != m_Clients.end() )
                 {
-                    ConnectionPtr pClient = (*it).second;
+                    TNConnectionPtr pClient = (*it).second;
                     result = pClient->Send( rawBuffer, length );
                 }
             }
@@ -569,6 +616,12 @@ public:
 
     void Close()
         {
+            for ( TNConnectionMap::iterator it = m_Clients.begin(); it != m_Clients.end(); ++it )
+            {
+                TNConnectionPtr pClient = (*it).second;
+                pClient->Close();
+            }
+
             if ( m_ListenSocket != TNSocketHandle_Invalid )
             {
                 m_ListenSocketMutex.Lock();
@@ -579,110 +632,8 @@ public:
                 m_ListenThread.Join();
                 m_ListenThread.Invalidate();
             }
+
         }
-
-    // TelnetServer::Connection : a connection established with a client
-    class Connection
-    {
-    public:
-
-        Connection( TelnetServer* pServer = NULL, unsigned int uClient = -1, TNSocketHandle hSocket = TNSocketHandle_Invalid )
-            : m_pServer(pServer)
-            , m_uClientID(uClient)
-            , m_SocketMutex()
-            , m_Socket(hSocket)
-            , m_Thread()
-            {}
-
-        ~Connection()
-            {}
-
-        bool Send( const char* pText, std::size_t uLength )
-            {
-                m_SocketMutex.Lock();
-                int flags = 0;
-                int bytes = send( m_Socket, pText, uLength, flags);
-                m_SocketMutex.Unlock();
-
-                return bytes >= 0;
-            }
-
-        void Close()
-            {
-                if ( m_Socket != TNSocketHandle_Invalid )
-                {
-                    m_SocketMutex.Lock();
-                    closesocket( m_Socket );
-                    m_Socket = TNSocketHandle_Invalid;
-                    m_SocketMutex.Unlock();
-
-                    m_Thread.Join();
-                    m_Thread.Invalidate();
-                }
-            }
-
-        void Run()
-            {
-                m_Thread.Run( ReceiveThreadEntry, this );
-            }
-
-    private:
-
-        static TNThread::RetVal TNAPI ReceiveThreadEntry( void* arg )
-            {
-                ((Connection*)arg)->ReceiveThread();
-                TNThread::Exit();
-
-                return 0;
-            }
-
-        void ReceiveThread()
-            {
-                bool done = false;
-
-                m_SocketMutex.Lock();
-                TNSocketHandle clientSocket = m_Socket;
-                done = (clientSocket == TNSocketHandle_Invalid);
-                m_SocketMutex.Unlock();
-
-                const unsigned int rawBufSize = 8192;
-                char rawBuffer[rawBufSize];
-
-                TNReceiveBuffer receiveBuffer;
-
-                while ( !done )
-                {
-                    int flags = 0;
-                    int bytes = recv( clientSocket, rawBuffer, rawBufSize, flags );
-
-                    if ( bytes > 0 )
-                    {
-                        receiveBuffer.Append( rawBuffer, bytes );
-                    }
-
-                    while ( !receiveBuffer.Empty() )
-                    {
-                        m_pServer->PushReceivedText( receiveBuffer.GetText() );
-                    }
-
-                    m_SocketMutex.Lock();
-                    clientSocket = m_Socket;
-                    done = (clientSocket == TNSocketHandle_Invalid);
-                    m_SocketMutex.Unlock();
-                }
-            }
-
-        TelnetServer*  m_pServer;
-        unsigned int   m_uClientID;
-        TNMutex        m_SocketMutex;
-        TNSocketHandle m_Socket;
-        TNThread       m_Thread;
-    };
-
-    typedef std::tr1::shared_ptr<Connection> ConnectionPtr;
-    typedef std::map<unsigned int, ConnectionPtr> ConnectionMap;
-
-    // End : TelnetServer::Connection
 
 private:
 
@@ -710,7 +661,7 @@ private:
                 if ( clientSocket != TNSocketHandle_Invalid )
                 {
                     unsigned int uClientID = ++m_uClientCreatedCount;
-                    ConnectionPtr pConnection( new Connection(this, uClientID, clientSocket) );
+                    TNConnectionPtr pConnection( new TNConnection(this, clientSocket) );
                     pConnection->Run();
                     m_Clients[uClientID] = pConnection;
                 }
@@ -721,20 +672,20 @@ private:
                 m_ListenSocketMutex.Unlock();
             }
 
-            for ( ConnectionMap::iterator it = m_Clients.begin(); it != m_Clients.end(); ++it )
+            for ( TNConnectionMap::iterator it = m_Clients.begin(); it != m_Clients.end(); ++it )
             {
-                ConnectionPtr pConnection = (*it).second;
+                TNConnectionPtr pConnection = (*it).second;
                 if ( pConnection )
                     pConnection->Close();
             }
             m_Clients.clear();
         }
 
-    TNThread       m_ListenThread;
-    TNSocketHandle m_ListenSocket;
-    TNMutex        m_ListenSocketMutex;
-    unsigned int   m_uClientCreatedCount;
-    ConnectionMap  m_Clients;
+    TNThread        m_ListenThread;
+    TNSocketHandle  m_ListenSocket;
+    TNMutex         m_ListenSocketMutex;
+    unsigned int    m_uClientCreatedCount;
+    TNConnectionMap m_Clients;
 }; // End : TelnetServer
 
 
