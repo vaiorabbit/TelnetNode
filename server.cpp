@@ -12,7 +12,7 @@ int main( int argc, char** argv )
         TNMessagePtr pMsg = pServer->PopReceivedText();
         if ( pMsg.get() != NULL )
         {
-            std::printf("Server got message. : %s", pMsg->Text.get());
+            std::printf("Server got message from client #%d. : %s", pMsg->ID, pMsg->Text.get());
             if ( !std::strcmp(pMsg->Text.get(), "bye\n") )
             {
                 pServer->SendText( "bye\n", 0 );

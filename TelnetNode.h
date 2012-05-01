@@ -107,16 +107,15 @@ class TNThread
 public:
 
 #if defined(TNPLATFORM_UNIX)
-    typedef pthread_t Handle;
     static const int InvalidHandle = 0;
+    typedef pthread_t Handle;
     typedef void* RetVal;
-    typedef RetVal TNAPI (*EntryFunc)( void* arg );
 #elif defined(TNPLATFORM_WINDOWS)
 #  define InvalidHandle NULL
     typedef HANDLE Handle;
     typedef DWORD RetVal;
-    typedef RetVal (TNAPI *EntryFunc)( LPVOID arg );
 #endif
+    typedef RetVal (TNAPI *EntryFunc)( void* arg );
 
     TNThread()
         :m_hThread(InvalidHandle) {}
@@ -321,11 +320,12 @@ class TNConnection
 {
 public:
 
-    TNConnection( TelnetNode* pNode, TNSocketHandle hSocket )
+    TNConnection( TelnetNode* pNode, TNSocketHandle hSocket, unsigned int uID )
         : m_Thread()
         , m_SocketMutex()
         , m_Socket(hSocket)
         , m_pNode(pNode)
+        , m_uID(uID)
         {}
 
     ~TNConnection()
@@ -355,7 +355,7 @@ public:
             }
         }
 
-    void Run()
+    void Start()
         {
             m_Thread.Run( ReceiveThreadEntry, this );
         }
@@ -405,7 +405,7 @@ private:
 
                 while ( !receiveBuffer.Empty() )
                 {
-                    m_pNode->PushReceivedText( receiveBuffer.GetText() );
+                    m_pNode->PushReceivedText( receiveBuffer.GetText(), m_uID );
                 }
 
                 m_SocketMutex.Lock();
@@ -419,6 +419,7 @@ private:
     TNSocketHandle m_Socket;
     TNMutex        m_SocketMutex;
     TelnetNode*    m_pNode;
+    unsigned int   m_uID;
 };
 
 typedef std::tr1::shared_ptr<TNConnection> TNConnectionPtr;
@@ -477,8 +478,8 @@ public:
                 int connectResult = connect( serverSocket, (sockaddr*)&service, sizeof(service) );
                 if ( connectResult == 0 )
                 {
-                    TNConnectionPtr pConnection( new TNConnection(this, serverSocket) );
-                    pConnection->Run();
+                    TNConnectionPtr pConnection( new TNConnection(this, serverSocket, 0) );
+                    pConnection->Start();
                     m_pServer = pConnection;
 
                     result = true;
@@ -661,8 +662,8 @@ private:
                 if ( clientSocket != TNSocketHandle_Invalid )
                 {
                     unsigned int uClientID = ++m_uClientCreatedCount;
-                    TNConnectionPtr pConnection( new TNConnection(this, clientSocket) );
-                    pConnection->Run();
+                    TNConnectionPtr pConnection( new TNConnection(this, clientSocket, uClientID) );
+                    pConnection->Start();
                     m_Clients[uClientID] = pConnection;
                 }
 
