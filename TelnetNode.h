@@ -507,7 +507,6 @@ public:
             if ( m_pServer.get() != NULL )
             {
                 m_pServer->Close();
-                puts("close done");
             }
         }
 
