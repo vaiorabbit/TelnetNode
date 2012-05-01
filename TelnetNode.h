@@ -10,20 +10,17 @@
 #include <vector>
 
 #if defined(__APPLE__) || defined(LINUX) || defined(__CYGWIN__)
-#  include <tr1/memory> // std::tr1::shared_ptr
 #  include <pthread.h>
-// BSD socket
 #  include <sys/types.h>
 #  include <sys/socket.h>
 #  include <arpa/inet.h>
 #  include <netinet/in.h>
-#  include <netdb.h> // hostent, gethostbyname
+#  include <netdb.h>
 #  include <errno.h>
 #  include <cstdio>
 #  define TNPLATFORM_UNIX
 #elif defined(WIN32)
 #  include <windows.h>
-#  include <memory> // std::tr1::shared_ptr
 #  include <stdio.h>
 #  define snprintf _snprintf
 #  pragma warning(disable: 4996) // suppress security warnings
@@ -48,7 +45,6 @@
 #  define TNSocketHandle_Invalid INVALID_SOCKET
 #  pragma comment(lib, "wsock32.lib")
 #endif
-
 
 
 // TNMutex : Abstraction layer for Win32 CS and pthread_mutex.
@@ -164,16 +160,7 @@ private:
 
 
 // TNTextPtr : A single line string
-template <typename T>
-struct TNTextPtrDeleter
-{
-    void operator()( T* p )
-        {
-            delete [] p;
-        }
-};
-
-typedef std::tr1::shared_ptr<char> TNTextPtr;
+typedef char* TNTextPtr;
 
 
 // TNMessage : Text received from peer node
@@ -186,9 +173,14 @@ struct TNMessage
         : Text(pText)
         , ID(uID)
         {}
+
+    ~TNMessage()
+        {
+            delete Text;
+        }
 };
 
-typedef std::tr1::shared_ptr<TNMessage> TNMessagePtr;
+typedef TNMessage* TNMessagePtr;
 typedef std::queue<TNMessagePtr> TNMessageQueue;
 
 // TNReceiveBuffer :
@@ -215,7 +207,7 @@ public:
 
     TNTextPtr GetText()
         {
-            TNTextPtr result;
+            TNTextPtr result = NULL;
             if ( !m_Texts.empty() )
             {
                 result = m_Texts.front();
@@ -246,7 +238,7 @@ public:
                 // std::copy( it_head, it_tail+1, pRawNewText ); // +1 == '\n' // VC++2010 warns std::copy is unsafe
                 std::memcpy( pRawNewText, &(*it_head), length+1 ); // +1 == '\n'
                 pRawNewText[length+1] = '\0';
-                m_Texts.push( TNTextPtr(pRawNewText, TNTextPtrDeleter<char>()) );
+                m_Texts.push( pRawNewText ); // deleted at ~TNMessage
                 it_head = it_tail + 1;
                 if ( it_head == m_Buffer.end() )
                     break;
@@ -284,13 +276,16 @@ public:
         {
             m_MessageMutex.Lock();
             TNMessagePtr msg( new TNMessage(pText, uClient) );
-            m_Messages.push( msg );
+            m_Messages.push( msg ); // deleted at DeleteReceivedText
             m_MessageMutex.Unlock();
         }
 
+    void DeleteReceivedText( TNMessagePtr pUnusedMsg )
+        { delete pUnusedMsg; }
+
     TNMessagePtr PopReceivedText()
         {
-            TNMessagePtr result;
+            TNMessagePtr result = NULL;
             m_MessageMutex.Lock();
             if ( !m_Messages.empty() )
             {
@@ -329,7 +324,9 @@ public:
         {}
 
     ~TNConnection()
-        {}
+        {
+            Close();
+        }
 
     bool Send( const char* pText, std::size_t uLength )
         {
@@ -422,7 +419,7 @@ private:
     unsigned int   m_uID;
 };
 
-typedef std::tr1::shared_ptr<TNConnection> TNConnectionPtr;
+typedef TNConnection* TNConnectionPtr;
 typedef std::map<unsigned int, TNConnectionPtr> TNConnectionMap;
 
 
@@ -504,9 +501,10 @@ public:
 
     void Close()
         {
-            if ( m_pServer.get() != NULL )
+            if ( m_pServer != NULL )
             {
                 m_pServer->Close();
+                delete m_pServer;
             }
         }
 
@@ -676,7 +674,10 @@ private:
             {
                 TNConnectionPtr pConnection = (*it).second;
                 if ( pConnection )
+                {
                     pConnection->Close();
+                    delete pConnection;
+                }
             }
             m_Clients.clear();
         }

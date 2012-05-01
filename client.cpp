@@ -11,11 +11,13 @@ int main( int argc, char** argv )
     while ( pClient )
     {
         TNMessagePtr pMsg = pClient->PopReceivedText();
-        if ( pMsg.get() != NULL )
+        if ( pMsg != NULL )
         {
-            std::printf( "Client got message. : %s", pMsg->Text.get() );
-            if ( !std::strcmp(pMsg->Text.get(), "bye\n") )
+            std::printf( "Client got message. : %s", pMsg->Text );
+            if ( !std::strcmp(pMsg->Text, "bye\n") )
                 break;
+
+            pClient->DeleteReceivedText( pMsg );
         }
 
         ++nTiming;

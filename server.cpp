@@ -10,14 +10,16 @@ int main( int argc, char** argv )
     while ( pServer )
     {
         TNMessagePtr pMsg = pServer->PopReceivedText();
-        if ( pMsg.get() != NULL )
+        if ( pMsg != NULL )
         {
-            std::printf("Server got message from client #%d. : %s", pMsg->ID, pMsg->Text.get());
-            if ( !std::strcmp(pMsg->Text.get(), "bye\n") )
+            std::printf("Server got message from client #%d. : %s", pMsg->ID, pMsg->Text);
+            if ( !std::strcmp(pMsg->Text, "bye\n") )
             {
                 pServer->SendText( "bye\n", 0 );
                 break;
             }
+
+            pServer->DeleteReceivedText( pMsg );
         }
     }
 
