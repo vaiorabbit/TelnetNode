@@ -263,7 +263,7 @@ public:
     static int Initialize();
     static void Finalize();
 
-    static TelnetNode* CreateServer( const char* address = "LOCALHOST", unsigned int port = 23 );
+    static TelnetNode* CreateServer( unsigned int port = 23 );
     static TelnetNode* CreateClient( const char* address = "LOCALHOST", unsigned int port = 23 );
     static void ReleaseNode( TelnetNode* pNode )
         { delete pNode; }
@@ -317,8 +317,8 @@ public:
 
     TNConnection( TelnetNode* pNode, TNSocketHandle hSocket, unsigned int uID )
         : m_Thread()
-        , m_SocketMutex()
         , m_Socket(hSocket)
+        , m_SocketMutex()
         , m_pNode(pNode)
         , m_uID(uID)
         {}
@@ -716,7 +716,7 @@ void TelnetNode::Finalize()
 }
 
 // static
-TelnetNode* TelnetNode::CreateServer( const char* address, unsigned int port )
+TelnetNode* TelnetNode::CreateServer( unsigned int port )
 {
     TelnetServer* pServer = new TelnetServer;
 
