@@ -692,7 +692,7 @@ private:
 
 
 // static
-int TelnetNode::Initialize()
+inline int TelnetNode::Initialize()
 {
     int result = 0;
 #if defined(TNPLATFORM_WINDOWS)
@@ -708,7 +708,7 @@ int TelnetNode::Initialize()
 }
 
 // static
-void TelnetNode::Finalize()
+inline void TelnetNode::Finalize()
 {
 #if defined(TNPLATFORM_WINDOWS)
     WSACleanup();
@@ -716,7 +716,7 @@ void TelnetNode::Finalize()
 }
 
 // static
-TelnetNode* TelnetNode::CreateServer( unsigned int port )
+inline TelnetNode* TelnetNode::CreateServer( unsigned int port )
 {
     TelnetServer* pServer = new TelnetServer;
 
@@ -731,7 +731,7 @@ TelnetNode* TelnetNode::CreateServer( unsigned int port )
 }
 
 // static
-TelnetNode* TelnetNode::CreateClient( const char* address, unsigned int port )
+inline TelnetNode* TelnetNode::CreateClient( const char* address, unsigned int port )
 {
     TelnetClient* pClient = new TelnetClient;
 
